@@ -1,0 +1,11 @@
+
+streamlit
+sounddevice
+requests
+whisper
+wave
+groq
+openai
+threading
+datetime
+logging
