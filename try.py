@@ -1,5 +1,5 @@
 import streamlit as st
-import pyaudio
+import sounddevice as sd
 import wave
 import threading
 import os
@@ -13,24 +13,19 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class AudioRecorder:
-    """Handles audio recording functionality using PyAudio."""
+    """Handles audio recording functionality using sounddevice."""
     
     def __init__(self):
-        self.CHUNK = 1024
-        self.FORMAT = pyaudio.paInt16
-        self.CHANNELS = 1
-        self.RATE = 44100
+        self.SAMPLE_RATE = 44100  # Sample rate for audio recording
+        self.CHANNELS = 1  # Mono audio
+        self.DURATION = 10  # Default duration of recording in seconds
         self.recording = False
         self.frames = []
-        self.audio = pyaudio.PyAudio()
         
-    def __del__(self):
-        """Cleanup PyAudio resources."""
-        self.audio.terminate()
-
-    def start_recording(self):
+    def start_recording(self, duration=10):
         """Start a new recording session."""
         try:
+            self.DURATION = duration
             self.recording = True
             self.frames = []
             threading.Thread(target=self._record, daemon=True).start()
@@ -45,25 +40,16 @@ class AudioRecorder:
         logger.info("Recording stopped")
 
     def _record(self) -> None:
-        """Internal method to handle the recording process."""
+        """Internal method to handle the recording process using sounddevice."""
         try:
-            stream = self.audio.open(
-                format=self.FORMAT,
-                channels=self.CHANNELS,
-                rate=self.RATE,
-                input=True,
-                frames_per_buffer=self.CHUNK
-            )
-            
-            while self.recording:
-                data = stream.read(self.CHUNK, exception_on_overflow=False)
-                self.frames.append(data)
-
+            logger.info(f"Recording for {self.DURATION} seconds...")
+            recording = sd.rec(int(self.SAMPLE_RATE * self.DURATION), 
+                               samplerate=self.SAMPLE_RATE, channels=self.CHANNELS, dtype='int16')
+            sd.wait()  # Wait until recording is done
+            self.frames = recording
+            logger.info("Recording completed")
         except Exception as e:
             logger.error(f"Error during recording: {e}")
-        finally:
-            stream.stop_stream()
-            stream.close()
 
     def save_recording(self, filename: str) -> str:
         """Save the recorded audio to a WAV file."""
@@ -73,9 +59,9 @@ class AudioRecorder:
 
             with wave.open(filepath, 'wb') as wf:
                 wf.setnchannels(self.CHANNELS)
-                wf.setsampwidth(self.audio.get_sample_size(self.FORMAT))
-                wf.setframerate(self.RATE)
-                wf.writeframes(b''.join(self.frames))
+                wf.setsampwidth(2)  # 2 bytes per sample (16-bit audio)
+                wf.setframerate(self.SAMPLE_RATE)
+                wf.writeframes(self.frames.tobytes())
 
             logger.info(f"Recording saved to {filepath}")
             return filepath
@@ -87,7 +73,7 @@ class GroqAPI:
     """Handles interactions with the Groq API."""
     
     def __init__(self, api_key: str):
-        self.api_key = "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"
+        self.api_key = "your_api_key_here"
         self.base_url = "https://api.groq.com/openai"
         
     def summarize_text(self, text: str) -> str:
@@ -162,16 +148,14 @@ def main():
     # Sidebar for settings
     with st.sidebar:
         st.header("Settings")
-        groq_api_key = "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"
+        groq_api_key = "your_api_key_here"
         st.markdown("---")
         st.markdown("### Instructions")
-        st.markdown("""
-        1. Enter your Groq API key
+        st.markdown("""1. Enter your Groq API key
         2. Click 'Start Recording' to begin
         3. Speak clearly into your microphone
         4. Click 'Stop Recording' when finished
-        5. Wait for transcription and summary
-        """)
+        5. Wait for transcription and summary""")
         
     # Main interface
     col1, col2 = st.columns(2)
